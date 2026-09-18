@@ -14,11 +14,16 @@
 
   <style>
 
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       padding: 0;
       font-family: Arial, sans-serif;
       background: #f4f6f8;
+      color: #212529;
     }
 
     .container {
@@ -82,7 +87,6 @@
       width: 100%;
       margin-top: 15px;
       border-radius: 12px;
-      transform: scaleX(-1);
     }
 
     #canvas {
@@ -98,6 +102,11 @@
       font-size: 16px;
       font-weight: bold;
       cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
 
     #btnCamera {
@@ -140,9 +149,11 @@
   </div>
 
 
+  <!-- DATA PEGAWAI -->
+
   <div class="pegawai">
 
-    <b>ID Pegawai:</b>
+    <b>NIP:</b>
     <span id="idPegawai">-</span>
 
     <br>
@@ -152,11 +163,28 @@
 
     <br>
 
+    <b>Jabatan:</b>
+    <span id="jabatanPegawai">-</span>
+
+    <br>
+
+    <b>Unit:</b>
+    <span id="unitPegawai">-</span>
+
+    <br>
+
     <b>Jenis:</b>
     <span id="jenisAbsensi">-</span>
 
+    <br>
+
+    <b>Jarak:</b>
+    <span id="jarakPegawai">-</span> meter
+
   </div>
 
+
+  <!-- STATUS -->
 
   <div
     id="status"
@@ -167,6 +195,8 @@
   </div>
 
 
+  <!-- AKTIFKAN KAMERA -->
+
   <button
     id="btnCamera"
     onclick="aktifkanKamera()">
@@ -176,6 +206,8 @@
   </button>
 
 
+  <!-- VIDEO -->
+
   <video
     id="video"
     autoplay
@@ -184,13 +216,19 @@
   </video>
 
 
+  <!-- CANVAS -->
+
   <canvas id="canvas"></canvas>
 
+
+  <!-- PREVIEW -->
 
   <img
     id="preview"
     alt="Preview selfie">
 
+
+  <!-- AMBIL FOTO -->
 
   <button
     id="btnTake"
@@ -201,6 +239,8 @@
   </button>
 
 
+  <!-- AMBIL ULANG -->
+
   <button
     id="btnRetake"
     onclick="ambilUlang()">
@@ -209,6 +249,8 @@
 
   </button>
 
+
+  <!-- KONFIRMASI -->
 
   <button
     id="btnConfirm"
@@ -223,431 +265,614 @@
 
 <script>
 
-  let cameraStream = null;
+/* =====================================================
+   VARIABEL
+   ===================================================== */
 
-  let fotoBase64 = null;
+let cameraStream = null;
+
+let fotoBase64 = null;
+
+let sedangMengirim = false;
 
 
-  /*
-   * Membaca parameter URL
-   */
+/* =====================================================
+   URL WEB APP
+   ===================================================== */
 
-  const params =
-    new URLSearchParams(
-      window.location.search
+const WEB_APP_URL =
+  'https://script.google.com/macros/s/AKfycbyYWacCDMS6TNcpv_F94IgaWqkdXrr3R6hmHJAjC650H8AkTBwfAaC5UFZxpURv4HdQ/exec';
+
+
+/* =====================================================
+   PARAMETER URL
+   ===================================================== */
+
+const params =
+  new URLSearchParams(
+    window.location.search
+  );
+
+
+const idPegawai =
+  params.get('idPegawai') || '';
+
+const nama =
+  params.get('nama') || '';
+
+const jabatan =
+  params.get('jabatan') || '';
+
+const unit =
+  params.get('unit') || '';
+
+const jenis =
+  params.get('jenis') || 'MASUK';
+
+const latitude =
+  params.get('latitude') || '';
+
+const longitude =
+  params.get('longitude') || '';
+
+const jarak =
+  params.get('jarak') || '';
+
+const statusGPS =
+  params.get('statusGPS') || 'VALID';
+
+const token =
+  params.get('token') || '';
+
+
+/* =====================================================
+   TAMPILKAN DATA PEGAWAI
+   ===================================================== */
+
+document.getElementById(
+  'idPegawai'
+).textContent =
+  idPegawai;
+
+document.getElementById(
+  'namaPegawai'
+).textContent =
+  nama;
+
+document.getElementById(
+  'jabatanPegawai'
+).textContent =
+  jabatan;
+
+document.getElementById(
+  'unitPegawai'
+).textContent =
+  unit;
+
+document.getElementById(
+  'jenisAbsensi'
+).textContent =
+  jenis;
+
+document.getElementById(
+  'jarakPegawai'
+).textContent =
+  jarak || '-';
+
+
+/* =====================================================
+   STATUS
+   ===================================================== */
+
+function setStatus(
+  message,
+  type
+) {
+
+  const status =
+    document.getElementById(
+      'status'
     );
 
+  status.innerHTML =
+    message;
 
-  const idPegawai =
-    params.get('idPegawai') || '';
+  status.className =
+    'status ' +
+    (type || '');
 
-  const nama =
-    params.get('nama') || '';
-
-  const jenis =
-    params.get('jenis') || 'MASUK';
-
-  const latitude =
-    params.get('latitude') || '';
-
-  const longitude =
-    params.get('longitude') || '';
-
-  const token =
-    params.get('token') || '';
+}
 
 
-  /*
-   * Tampilkan data
-   */
+/* =====================================================
+   AKTIFKAN KAMERA
+   ===================================================== */
 
-  document.getElementById(
-    'idPegawai'
-  ).textContent =
-    idPegawai;
+async function aktifkanKamera() {
 
-  document.getElementById(
-    'namaPegawai'
-  ).textContent =
-    nama;
-
-  document.getElementById(
-    'jenisAbsensi'
-  ).textContent =
-    jenis;
-
-
-  /*
-   * Status
-   */
-
-  function setStatus(
-    message,
-    type
-  ) {
-
-    const status =
-      document.getElementById(
-        'status'
-      );
-
-    status.innerHTML =
-      message;
-
-    status.className =
-      'status ' +
-      (type || '');
-
-  }
-
-
-  /*
-   * AKTIFKAN KAMERA
-   */
-
-  async function aktifkanKamera() {
-
-    const btn =
-      document.getElementById(
-        'btnCamera'
-      );
-
-    btn.disabled = true;
-
-
-    setStatus(
-      'Meminta izin kamera...',
-      ''
+  const btn =
+    document.getElementById(
+      'btnCamera'
     );
 
+  btn.disabled = true;
 
-    try {
+  setStatus(
+    'Meminta izin kamera...',
+    ''
+  );
 
-      if (
-        !navigator.mediaDevices ||
-        !navigator.mediaDevices.getUserMedia
-      ) {
+  try {
 
-        throw new Error(
-          'Browser tidak mendukung akses kamera.'
-        );
+    if (
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
 
-      }
-
-
-      cameraStream =
-        await navigator.mediaDevices
-          .getUserMedia({
-
-            video: {
-              facingMode: {
-                ideal: 'user'
-              },
-
-              width: {
-                ideal: 720
-              },
-
-              height: {
-                ideal: 720
-              }
-
-            },
-
-            audio: false
-
-          });
-
-
-      const video =
-        document.getElementById(
-          'video'
-        );
-
-
-      video.srcObject =
-        cameraStream;
-
-
-      await video.play();
-
-
-      video.style.display =
-        'block';
-
-
-      btn.style.display =
-        'none';
-
-
-      document.getElementById(
-        'btnTake'
-      ).style.display =
-        'block';
-
-
-      setStatus(
-        'Kamera aktif. Posisikan wajah Anda.',
-        'success'
+      throw new Error(
+        'Browser tidak mendukung akses kamera.'
       );
 
     }
 
-    catch (error) {
 
-      btn.disabled = false;
+    cameraStream =
+      await navigator.mediaDevices.getUserMedia({
 
+        video: {
 
-      setStatus(
+          facingMode: {
+            ideal: 'user'
+          },
 
-        'Kamera tidak dapat dibuka.<br><br>' +
+          width: {
+            ideal: 720
+          },
 
-        'Kode: ' +
-        error.name +
-        '<br>' +
+          height: {
+            ideal: 720
+          }
 
-        'Pesan: ' +
-        error.message,
+        },
 
-        'error'
+        audio: false
 
-      );
+      });
 
-    }
-
-  }
-
-
-  /*
-   * AMBIL FOTO
-   */
-
-  function ambilFoto() {
 
     const video =
       document.getElementById(
         'video'
       );
 
-    const canvas =
-      document.getElementById(
-        'canvas'
-      );
+
+    video.srcObject =
+      cameraStream;
 
 
-    if (
-      !video.videoWidth ||
-      !video.videoHeight
-    ) {
-
-      setStatus(
-        'Kamera belum siap.',
-        'error'
-      );
-
-      return;
-
-    }
-
-
-    canvas.width =
-      video.videoWidth;
-
-    canvas.height =
-      video.videoHeight;
-
-
-    const context =
-      canvas.getContext(
-        '2d'
-      );
-
-
-    context.translate(
-      canvas.width,
-      0
-    );
-
-    context.scale(
-      -1,
-      1 );
-
-
-    context.drawImage(
-      video,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
-
-
-    fotoBase64 =
-      canvas.toDataURL(
-        'image/jpeg',
-        0.85
-      );
-
-
-    const preview =
-      document.getElementById(
-        'preview'
-      );
-
-
-    preview.src =
-      fotoBase64;
-
-    preview.style.display =
-      'block';
+    await video.play();
 
 
     video.style.display =
+      'block';
+
+
+    btn.style.display =
       'none';
 
 
     document.getElementById(
       'btnTake'
     ).style.display =
-      'none';
-
-
-    document.getElementById(
-      'btnRetake'
-    ).style.display =
       'block';
-
-
-    document.getElementById(
-      'btnConfirm'
-    ).style.display =
-      'block';
-
-
-    hentikanKamera();
 
 
     setStatus(
-      'Foto berhasil diambil. Silakan periksa.',
+      'Kamera aktif. Posisikan wajah Anda.',
       'success'
     );
 
   }
 
+  catch (error) {
 
-  /*
-   * AMBIL ULANG
-   */
-
-  function ambilUlang() {
-
-    fotoBase64 = null;
-
-
-    document.getElementById(
-      'preview'
-    ).style.display =
-      'none';
-
-
-    document.getElementById(
-      'btnRetake'
-    ).style.display =
-      'none';
-
-
-    document.getElementById(
-      'btnConfirm'
-    ).style.display =
-      'none';
-
-
-    document.getElementById(
-      'btnCamera'
-    ).style.display =
-      'block';
-
-
-    document.getElementById(
-      'btnCamera'
-    ).disabled =
+    btn.disabled =
       false;
 
-
     setStatus(
-      'Tekan AKTIFKAN KAMERA.',
-      ''
+
+      'Kamera tidak dapat dibuka.<br><br>' +
+
+      'Kode: ' +
+      error.name +
+      '<br>' +
+
+      'Pesan: ' +
+      error.message,
+
+      'error'
+
     );
 
   }
 
-
-  /*
-   * KONFIRMASI
-   */
-
-  function konfirmasi() {
-
-    if (!fotoBase64) {
-
-      setStatus(
-        'Foto belum tersedia.',
-        'error'
-      );
-
-      return;
-
-    }
+}
 
 
-    setStatus(
-      'Foto selfie siap disimpan.',
-      'success'
+/* =====================================================
+   AMBIL FOTO
+   ===================================================== */
+
+function ambilFoto() {
+
+  const video =
+    document.getElementById(
+      'video'
+    );
+
+  const canvas =
+    document.getElementById(
+      'canvas'
     );
 
 
-    /*
-     * BELUM menyimpan ke Drive.
-     *
-     * Tahap berikutnya kita
-     * hubungkan ke Apps Script.
-     */
+  if (
+    !video.videoWidth ||
+    !video.videoHeight
+  ) {
 
-    console.log({
+    setStatus(
+      'Kamera belum siap.',
+      'error'
+    );
+
+    return;
+
+  }
+
+
+  canvas.width =
+    video.videoWidth;
+
+  canvas.height =
+    video.videoHeight;
+
+
+  const context =
+    canvas.getContext(
+      '2d'
+    );
+
+
+  /*
+   * Efek mirror selfie
+   */
+
+  context.translate(
+    canvas.width,
+    0
+  );
+
+  context.scale(
+    -1,
+    1
+  );
+
+
+  context.drawImage(
+    video,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+
+  /*
+   * Ubah menjadi Base64
+   */
+
+  fotoBase64 =
+    canvas.toDataURL(
+      'image/jpeg',
+      0.85
+    );
+
+
+  const preview =
+    document.getElementById(
+      'preview'
+    );
+
+
+  preview.src =
+    fotoBase64;
+
+  preview.style.display =
+    'block';
+
+
+  video.style.display =
+    'none';
+
+
+  document.getElementById(
+    'btnTake'
+  ).style.display =
+    'none';
+
+
+  document.getElementById(
+    'btnRetake'
+  ).style.display =
+    'block';
+
+
+  document.getElementById(
+    'btnConfirm'
+  ).style.display =
+    'block';
+
+
+  hentikanKamera();
+
+
+  setStatus(
+    'Foto berhasil diambil. Silakan periksa sebelum dikirim.',
+    'success'
+  );
+
+}
+
+
+/* =====================================================
+   AMBIL ULANG
+   ===================================================== */
+
+function ambilUlang() {
+
+  fotoBase64 =
+    null;
+
+
+  document.getElementById(
+    'preview'
+  ).style.display =
+    'none';
+
+
+  document.getElementById(
+    'btnRetake'
+  ).style.display =
+    'none';
+
+
+  document.getElementById(
+    'btnConfirm'
+  ).style.display =
+    'none';
+
+
+  document.getElementById(
+    'btnCamera'
+  ).style.display =
+    'block';
+
+
+  document.getElementById(
+    'btnCamera'
+  ).disabled =
+    false;
+
+
+  setStatus(
+    'Tekan AKTIFKAN KAMERA.',
+    ''
+  );
+
+}
+
+
+/* =====================================================
+   KONFIRMASI SELFIE
+   ===================================================== */
+
+function konfirmasi() {
+
+  if (!fotoBase64) {
+
+    setStatus(
+      'Foto belum tersedia.',
+      'error'
+    );
+
+    return;
+
+  }
+
+
+  if (sedangMengirim) {
+
+    return;
+
+  }
+
+
+  sedangMengirim =
+    true;
+
+
+  const btn =
+    document.getElementById(
+      'btnConfirm'
+    );
+
+
+  btn.disabled =
+    true;
+
+
+  btn.textContent =
+    '⏳ MENYIMPAN ABSENSI...';
+
+
+  setStatus(
+    'Mengirim data absensi...',
+    ''
+  );
+
+
+  /*
+   * FORM POST
+   */
+
+  const form =
+    document.createElement(
+      'form'
+    );
+
+
+  form.method =
+    'POST';
+
+
+  form.action =
+    WEB_APP_URL;
+
+
+  /*
+   * _top membuat browser
+   * berpindah ke halaman hasil
+   */
+
+  form.target =
+    '_top';
+
+
+  form.style.display =
+    'none';
+
+
+  /*
+   * DATA ABSENSI
+   */
+
+  const data = {
+
+    idPegawai:
       idPegawai,
-      nama,
-      jenis,
-      latitude,
-      longitude,
-      token
-    });
 
-  }
+    nama:
+      nama,
+
+    jabatan:
+      jabatan,
+
+    unit:
+      unit,
+
+    jenis:
+      jenis,
+
+    latitude:
+      latitude,
+
+    longitude:
+      longitude,
+
+    jarak:
+      jarak,
+
+    statusGPS:
+      statusGPS,
+
+    token:
+      token,
+
+    device:
+      navigator.userAgent,
+
+    fotoBase64:
+      fotoBase64
+
+  };
 
 
   /*
-   * MATIKAN KAMERA
+   * MASUKKAN DATA KE FORM
    */
 
-  function hentikanKamera() {
+  Object.keys(data).forEach(
+    function(key) {
 
-    if (!cameraStream) {
-      return;
-    }
+      const input =
+        document.createElement(
+          'input'
+        );
 
 
-    cameraStream
-      .getTracks()
-      .forEach(
-        function(track) {
-          track.stop();
-        }
+      input.type =
+        'hidden';
+
+
+      input.name =
+        key;
+
+
+      input.value =
+        data[key] || '';
+
+
+      form.appendChild(
+        input
       );
 
+    }
+  );
 
-    cameraStream = null;
+
+  /*
+   * KIRIM
+   */
+
+  document.body.appendChild(
+    form
+  );
+
+
+  form.submit();
+
+}
+
+
+/* =====================================================
+   MATIKAN KAMERA
+   ===================================================== */
+
+function hentikanKamera() {
+
+  if (!cameraStream) {
+
+    return;
 
   }
+
+
+  cameraStream
+    .getTracks()
+    .forEach(
+      function(track) {
+
+        track.stop();
+
+      }
+    );
+
+
+  cameraStream =
+    null;
+
+}
 
 </script>
 
